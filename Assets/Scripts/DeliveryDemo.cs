@@ -7,13 +7,17 @@ public class DeliveryDemo : MonoBehaviour
     public int houseCount = 20;
     public float citySize = 100f;
 
+    [Header("Use Imported House Assets")]
+    public GameObject[] housePrefabs;
+    public bool overrideHouseMaterials = true;
+
     [Header("Gameplay")]
     public int money = 0;
     public int rewardPerDelivery = 15;
     public float interactDistance = 7f;
 
     [Header("Manual Car")]
-    public int gear = 0; // 0 = Neutral
+    public int gear = 0;
     public int maxGear = 5;
 
     public float acceleration = 32f;
@@ -95,34 +99,25 @@ public class DeliveryDemo : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.E))
         {
-            if (inCar)
-                GearUp();
-            else
-                Interact();
+            if (inCar) GearUp();
+            else Interact();
         }
 
         if (Input.GetKeyDown(KeyCode.Q) && inCar)
-        {
             GearDown();
-        }
 
         if (Input.GetKeyDown(KeyCode.R) && inCar)
         {
             engineOn = true;
             rpm = idleRpm;
             PlayTone(500f, 0.12f);
-            Debug.Log("Engine restarted.");
         }
 
         if (Input.GetKeyDown(KeyCode.F))
-        {
             ToggleCar();
-        }
 
         if (inCar)
-        {
             CarCameraLook();
-        }
         else
         {
             PlayerLook();
@@ -146,7 +141,6 @@ public class DeliveryDemo : MonoBehaviour
         if (!Application.isPlaying) return;
 
         GUI.Box(new Rect(10, 10, 430, 235), "");
-
         GUI.Label(new Rect(25, 25, 390, 25), "Money: £" + money);
         GUI.Label(new Rect(25, 50, 390, 25), "Food picked up: " + (hasFood ? "YES" : "NO"));
         GUI.Label(new Rect(25, 75, 390, 25), "Mode: " + (inCar ? "Driving" : "Walking"));
@@ -230,10 +224,7 @@ public class DeliveryDemo : MonoBehaviour
             roadH.transform.position = new Vector3(0, 0.002f, i * 20);
             roadH.transform.localScale = new Vector3(citySize, 0.01f, 8f);
             roadH.GetComponent<Renderer>().sharedMaterial = roadMat;
-
-            Collider roadHCollider = roadH.GetComponent<Collider>();
-            if (roadHCollider != null)
-                DestroyImmediate(roadHCollider);
+            DestroyImmediate(roadH.GetComponent<Collider>());
 
             GameObject roadV = GameObject.CreatePrimitive(PrimitiveType.Cube);
             roadV.name = "Road Vertical";
@@ -241,10 +232,7 @@ public class DeliveryDemo : MonoBehaviour
             roadV.transform.position = new Vector3(i * 20, 0.003f, 0);
             roadV.transform.localScale = new Vector3(8f, 0.01f, citySize);
             roadV.GetComponent<Renderer>().sharedMaterial = roadMat;
-
-            Collider roadVCollider = roadV.GetComponent<Collider>();
-            if (roadVCollider != null)
-                DestroyImmediate(roadVCollider);
+            DestroyImmediate(roadV.GetComponent<Collider>());
         }
     }
 
@@ -278,35 +266,129 @@ public class DeliveryDemo : MonoBehaviour
 
     void CreateHouses()
     {
-        Material houseMat = MakeMaterial("House", new Color(0.65f, 0.65f, 0.65f));
+        Material fallbackHouseMat = MakeMaterial("Fallback House", new Color(0.75f, 0.75f, 0.75f));
+        Material fixedAssetMat = MakeMaterial("Fixed Asset House", new Color(0.75f, 0.78f, 0.72f));
         Material doorMat = MakeMaterial("Door", new Color(0.35f, 0.18f, 0.05f));
 
         for (int i = 1; i <= houseCount; i++)
         {
             Vector3 pos = GetRandomHousePosition();
 
-            GameObject house = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            house.name = "Customer House " + i;
-            house.transform.SetParent(transform);
-            house.transform.position = pos;
+            GameObject house;
 
-            float width = Random.Range(5f, 8f);
-            float height = Random.Range(4f, 8f);
-            float depth = Random.Range(5f, 8f);
+            if (housePrefabs != null && housePrefabs.Length > 0)
+            {
+                GameObject prefab = housePrefabs[Random.Range(0, housePrefabs.Length)];
 
-            house.transform.localScale = new Vector3(width, height, depth);
-            house.GetComponent<Renderer>().sharedMaterial = houseMat;
+                house = Instantiate(
+                    prefab,
+                    pos,
+                    Quaternion.Euler(0, Random.Range(0, 4) * 90f, 0),
+                    transform
+                );
 
-            DeliveryHouse h = house.AddComponent<DeliveryHouse>();
-            h.houseName = house.name;
+                house.name = "Customer House " + i + " Asset";
+
+                ResizeHouseToNormalSize(house, 7f);
+
+                if (overrideHouseMaterials)
+                {
+                    Renderer[] renderers = house.GetComponentsInChildren<Renderer>();
+
+                    foreach (Renderer r in renderers)
+                    {
+                        r.sharedMaterial = fixedAssetMat;
+                    }
+                }
+            }
+            else
+            {
+                house = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                house.name = "Customer House " + i;
+                house.transform.SetParent(transform);
+                house.transform.position = pos;
+                house.transform.localScale = new Vector3(6f, 5f, 6f);
+                house.GetComponent<Renderer>().sharedMaterial = fallbackHouseMat;
+            }
+
+            DeliveryHouse deliveryHouse = house.AddComponent<DeliveryHouse>();
+            deliveryHouse.houseName = "Customer House " + i;
+
+            EnsureHouseCollider(house);
 
             GameObject door = GameObject.CreatePrimitive(PrimitiveType.Cube);
             door.name = "Door Bell";
             door.transform.SetParent(house.transform);
-            door.transform.localPosition = new Vector3(0, -0.25f, -0.52f);
-            door.transform.localScale = new Vector3(0.25f, 0.45f, 0.05f);
+            door.transform.localPosition = new Vector3(0, 1f, -2.6f);
+            door.transform.localScale = new Vector3(0.45f, 1.2f, 0.12f);
             door.GetComponent<Renderer>().sharedMaterial = doorMat;
         }
+    }
+
+    void ResizeHouseToNormalSize(GameObject house, float targetWidth)
+    {
+        Renderer[] renderers = house.GetComponentsInChildren<Renderer>();
+
+        if (renderers.Length == 0)
+            return;
+
+        Bounds bounds = renderers[0].bounds;
+
+        foreach (Renderer r in renderers)
+        {
+            bounds.Encapsulate(r.bounds);
+        }
+
+        float biggestSide = Mathf.Max(bounds.size.x, bounds.size.z);
+
+        if (biggestSide <= 0.01f)
+            return;
+
+        float scaleMultiplier = targetWidth / biggestSide;
+
+        house.transform.localScale *= scaleMultiplier;
+
+        // Recalculate bounds after resizing
+        renderers = house.GetComponentsInChildren<Renderer>();
+        bounds = renderers[0].bounds;
+
+        foreach (Renderer r in renderers)
+        {
+            bounds.Encapsulate(r.bounds);
+        }
+
+        // Put the house on the ground
+        float bottomY = bounds.min.y;
+        house.transform.position += new Vector3(0, -bottomY, 0);
+    }
+
+
+    void EnsureHouseCollider(GameObject house)
+    {
+        Collider[] oldColliders = house.GetComponentsInChildren<Collider>();
+
+        foreach (Collider c in oldColliders)
+        {
+            DestroyImmediate(c);
+        }
+
+        Renderer[] renderers = house.GetComponentsInChildren<Renderer>();
+
+        if (renderers.Length == 0)
+            return;
+
+        Bounds bounds = renderers[0].bounds;
+
+        foreach (Renderer r in renderers)
+        {
+            bounds.Encapsulate(r.bounds);
+        }
+
+        BoxCollider box = house.AddComponent<BoxCollider>();
+
+        box.center = house.transform.InverseTransformPoint(bounds.center);
+        box.size = new Vector3(7f, 6f, 7f);
+        box.isTrigger = false;
     }
 
     Vector3 GetRandomHousePosition()
@@ -319,10 +401,10 @@ public class DeliveryDemo : MonoBehaviour
             if (Mathf.Abs(x % 20f) < 6f) x += 9f;
             if (Mathf.Abs(z % 20f) < 6f) z += 9f;
 
-            Vector3 pos = new Vector3(x, 3f, z);
+            Vector3 pos = new Vector3(x, 0.05f, z);
 
-            Vector3 shopPos = new Vector3(0, 3f, -45f);
-            Vector3 carSpawnPos = new Vector3(0f, 1.2f, -32f);
+            Vector3 shopPos = new Vector3(0, 0f, -45f);
+            Vector3 carSpawnPos = new Vector3(0f, 0f, -32f);
 
             if (Vector3.Distance(pos, shopPos) < 28f)
                 continue;
@@ -333,7 +415,7 @@ public class DeliveryDemo : MonoBehaviour
             return pos;
         }
 
-        return new Vector3(Random.Range(-40f, 40f), 3f, Random.Range(5f, 35f));
+        return new Vector3(Random.Range(-40f, 40f), 0f, Random.Range(5f, 35f));
     }
 
     void CreateCar()
@@ -371,26 +453,10 @@ public class DeliveryDemo : MonoBehaviour
         rearBumper.transform.localScale = new Vector3(2.0f, 0.35f, 0.2f);
         rearBumper.GetComponent<Renderer>().sharedMaterial = MakeMaterial("Bumper", new Color(0.1f, 0.1f, 0.1f));
 
-        GameObject windscreen = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        windscreen.name = "Windscreen";
-        windscreen.transform.SetParent(car.transform);
-        windscreen.transform.localPosition = new Vector3(0, 0.8f, 0.55f);
-        windscreen.transform.localScale = new Vector3(1.6f, 0.45f, 0.08f);
-        windscreen.GetComponent<Renderer>().sharedMaterial = MakeMaterial("Glass", new Color(0.4f, 0.7f, 0.9f));
-
-        GameObject rearWindow = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        rearWindow.name = "Rear Window";
-        rearWindow.transform.SetParent(car.transform);
-        rearWindow.transform.localPosition = new Vector3(0, 0.8f, -0.75f);
-        rearWindow.transform.localScale = new Vector3(1.6f, 0.4f, 0.08f);
-        rearWindow.GetComponent<Renderer>().sharedMaterial = MakeMaterial("Glass", new Color(0.4f, 0.7f, 0.9f));
-
         DestroyImmediate(body.GetComponent<Collider>());
         DestroyImmediate(cabin.GetComponent<Collider>());
         DestroyImmediate(frontBumper.GetComponent<Collider>());
         DestroyImmediate(rearBumper.GetComponent<Collider>());
-        DestroyImmediate(windscreen.GetComponent<Collider>());
-        DestroyImmediate(rearWindow.GetComponent<Collider>());
 
         BoxCollider mainCol = car.AddComponent<BoxCollider>();
         mainCol.center = new Vector3(0, 0.25f, 0);
@@ -549,8 +615,7 @@ public class DeliveryDemo : MonoBehaviour
 
         UpdateEngine(throttle);
 
-        if (!engineOn)
-            return;
+        if (!engineOn) return;
 
         if (gear == 0)
         {
@@ -562,8 +627,7 @@ public class DeliveryDemo : MonoBehaviour
 
         float maxSpeedThisGear = gearSpeedLimits[gear];
 
-        bool wrongHighGearAtLowSpeed =
-            gear >= 3 && speedMph < 8f && !clutchPressed && throttle > 0.2f;
+        bool wrongHighGearAtLowSpeed = gear >= 3 && speedMph < 8f && !clutchPressed && throttle > 0.2f;
 
         if (wrongHighGearAtLowSpeed)
         {
@@ -574,7 +638,6 @@ public class DeliveryDemo : MonoBehaviour
                 engineOn = false;
                 rpm = 0f;
                 PlayTone(120f, 0.2f);
-                Debug.Log("Engine stalled. You tried to pull away in too high gear.");
             }
 
             return;
@@ -634,7 +697,6 @@ public class DeliveryDemo : MonoBehaviour
         }
 
         rpm = Mathf.Clamp(rpm, 0f, maxRpm);
-
         UpdateEngineSound();
     }
 
@@ -659,35 +721,27 @@ public class DeliveryDemo : MonoBehaviour
     {
         if (!clutchPressed)
         {
-            Debug.Log("Press Left Shift clutch to change gear.");
             PlayTone(180f, 0.08f);
             return;
         }
 
         gear = Mathf.Clamp(gear + 1, 0, maxGear);
         rpm *= 0.65f;
-
         PlayTone(700f, 0.05f);
-        Debug.Log("Gear up: " + (gear == 0 ? "N" : gear.ToString()));
     }
 
     void GearDown()
     {
         if (!clutchPressed)
         {
-            Debug.Log("Press Left Shift clutch to change gear.");
             PlayTone(180f, 0.08f);
             return;
         }
 
         gear = Mathf.Clamp(gear - 1, 0, maxGear);
         rpm *= 1.25f;
-
-        if (rpm > maxRpm)
-            rpm = maxRpm;
-
+        rpm = Mathf.Clamp(rpm, 0f, maxRpm);
         PlayTone(450f, 0.05f);
-        Debug.Log("Gear down: " + (gear == 0 ? "N" : gear.ToString()));
     }
 
     void Interact()
@@ -714,33 +768,25 @@ public class DeliveryDemo : MonoBehaviour
         }
 
         PlayTone(200f, 0.08f);
-        Debug.Log("Nothing to interact with.");
     }
 
     void PickUpFood()
     {
         if (hasFood)
         {
-            Debug.Log("You already have food.");
             PlayTone(200f, 0.08f);
             return;
         }
 
         DeliveryHouse[] houses = FindObjectsByType<DeliveryHouse>(FindObjectsSortMode.None);
 
-        if (houses.Length == 0)
-        {
-            Debug.Log("No houses found.");
-            return;
-        }
+        if (houses.Length == 0) return;
 
         currentTarget = houses[Random.Range(0, houses.Length)];
         hasFood = true;
 
         CreateCustomerMarker(currentTarget);
-
         PlayTone(650f, 0.1f);
-        Debug.Log("Food picked up. Deliver to: " + currentTarget.houseName);
     }
 
     void CompleteDelivery()
@@ -768,8 +814,8 @@ public class DeliveryDemo : MonoBehaviour
         GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         marker.name = "ACTIVE DELIVERY MARKER";
         marker.transform.SetParent(house.transform);
-        marker.transform.localPosition = new Vector3(0, 1.2f, 0);
-        marker.transform.localScale = new Vector3(0.6f, 0.6f, 0.6f);
+        marker.transform.localPosition = new Vector3(0, 4f, 0);
+        marker.transform.localScale = new Vector3(1.2f, 1.2f, 1.2f);
         marker.GetComponent<Renderer>().sharedMaterial = MakeMaterial("Marker Green", new Color(0f, 1f, 0.1f));
     }
 
